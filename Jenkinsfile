@@ -8,65 +8,34 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                checkout([$class: 'GitSCM',
-                  branches: [[name: '*/main']],
-                  userRemoteConfigs: [[
-                    url: 'https://github.com/vodnalasanthosh47/CICD-Project.git',
-                    credentialsId: 'github-creds'
-                  ]]
-                ])
+                checkout scm
             }
         }
 
         stage('Create Virtual Environment') {
             steps {
-                sh '$PYTHON -m venv $VENV'
-                sh '$VENV/bin/pip install --upgrade pip'
+                bat 'python -m venv venv'
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh '$VENV/bin/pip install -r requirements.txt'
+                bat '.\\venv\\Scripts\\python.exe -m pip install --upgrade pip'
+                
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh '$VENV/bin/pytest -v'
+                bat '.\\venv\\Scripts\\python.exe test_app.py'
             }
         }
-
+        
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE .'
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                                  usernameVariable: 'USER',
-                                                  passwordVariable: 'PASS')]) {
-                    sh '''
-                      echo $PASS | docker login -u $USER --password-stdin
-                      docker push $IMAGE
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy Container') {
-            steps {
-                sh '''
-                  docker pull $IMAGE
-                  docker stop ci-cd-demo || true
-                  docker rm ci-cd-demo || true
-                  docker run -d -p 5000:5000 --name ci-cd-demo $IMAGE
-                '''
+                bat "docker build -t ${DOCKERHUB_USER}/myapp:latest ."
             }
         }
     }
