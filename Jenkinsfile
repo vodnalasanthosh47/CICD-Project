@@ -2,66 +2,82 @@ pipeline {
     agent any
 
     environment {
-        // Ensure this username is correct
-        DOCKERHUB_USER = "vodnalasanthosh47"    
+        IMAGE = "vodnalasanthosh/cicd-project-pipeline:jenkins"
+        VENV = ".venv"
+        // On Windows, we usually just call 'python' if it is added to the PATH
+        PYTHON = "python" 
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/vodnalasanthosh47/CICD-Project.git'
+                checkout([$class: 'GitSCM',
+                  branches: [[name: '*/main']],
+                  userRemoteConfigs: [[
+                    url: 'https://github.com/vodnalasanthosh47/CICD-Project.git',
+                    credentialsId: 'github-creds'
+                  ]]
+                ])
+            }
+        }
+
+        stage('Create Virtual Environment') {
+            steps {
+                // 1. Create venv
+                // 2. Upgrade pip using the executable inside Scripts
+                bat '''
+                    %PYTHON% -m venv %VENV%
+                    %VENV%\\Scripts\\python.exe -m pip install --upgrade pip
+                '''
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                // Modified for Windows: Use 'bat', backward slashes, and direct script calls
-                bat '''
-                    python -m venv venv
-                    venv\\Scripts\\python.exe -m pip install --upgrade pip
-                    venv\\Scripts\\pip.exe install -r requirements.txt
-                '''
+                // Use pip inside the virtual environment
+                bat '%VENV%\\Scripts\\pip.exe install -r requirements.txt'
             }
         }
 
         stage('Run Tests') {
             steps {
-                // Modified for Windows: Set PYTHONPATH via 'set' and call pytest via python module
-                bat '''
-                    set PYTHONPATH=.
-                    venv\\Scripts\\python.exe -m pytest
-                '''
+                // Use pytest inside the virtual environment
+                bat '%VENV%\\Scripts\\pytest.exe -v'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                // Use double quotes "..." so Groovy interpolates ${DOCKERHUB_USER} before running the command
-                bat "docker build -t ${DOCKERHUB_USER}/myapp:latest ."
+                bat 'docker build -t %IMAGE% .'
             }
         }
 
-        stage('Login to Docker Hub') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([string(credentialsId: 'dockerhub-pass', variable: 'DOCKER_PASS')]) {
-                    // Windows Batch Syntax:
-                    // 1. Use @echo off or @echo to prevent printing the command (hides password in logs)
-                    // 2. Use %DOCKER_PASS% for the environment variable in Batch
-                    bat '@echo %DOCKER_PASS% | docker login -u ${DOCKERHUB_USER} --password-stdin'
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', 
+                                                  usernameVariable: 'USER', 
+                                                  passwordVariable: 'PASS')]) {
+                    // @echo prevents the password from showing in logs
+                    // %VAR% is used for batch variables
+                    bat '''
+                      @echo %PASS% | docker login -u %USER% --password-stdin
+                      docker push %IMAGE%
+                    '''
                 }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Deploy Container') {
             steps {
-                bat "docker push ${DOCKERHUB_USER}/myapp:latest"
-            }
-        }
-
-        stage('Verify Image') {
-            steps {
-                bat 'docker images'
+                // The "|| echo..." pattern mimics "|| true" in Linux. 
+                // It ensures the build doesn't fail if the container doesn't exist yet.
+                bat '''
+                  docker pull %IMAGE%
+                  docker stop ci-cd-demo || echo "Container not running, skipping stop"
+                  docker rm ci-cd-demo || echo "Container not found, skipping remove"
+                  docker run -d -p 5000:5000 --name ci-cd-demo %IMAGE%
+                '''
             }
         }
     }
