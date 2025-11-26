@@ -72,6 +72,7 @@ pipeline {
                     // @echo prevents the password from showing in logs
                     // %VAR% is used for batch variables
                     bat '''
+                      docker logout
                       @echo %PASS% | docker login -u %USER% --password-stdin
                       docker push %IMAGE%
                     '''
