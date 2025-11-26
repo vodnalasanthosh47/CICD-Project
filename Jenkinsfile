@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "vodnalasanthosh/cicd-project-pipeline"
+        IMAGE = "vodnalasanthosh47/cicd-project-pipeline:jenkins"
         VENV = ".venv"
         // On Windows, we usually just call 'python' if it is added to the PATH
         PYTHON = "C:\\Users\\vodna\\AppData\\Local\\Programs\\Python\\Python312\\python.exe" 
